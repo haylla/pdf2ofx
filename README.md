@@ -42,20 +42,3 @@ Gerar OFX
       ↓
 Baixar arquivo .ofx
 
-## Tecnologias utilizadas
-
-Backend
-Node.js
-TypeScript
-Express
-Multer
-pdf-parse
-Frontend
-React
-TypeScript
-Vite
-Axios
-CSS
-Controle de versão
-Git
-GitHub
