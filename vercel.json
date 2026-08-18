@@ -5,7 +5,23 @@
       "framework": "vite"
     },
     "backend": {
-      "root": "backend/"
+      "root": "backend/",
+      "entrypoint": "api/index.ts",
+      "framework": "express"
     }
-  }
+  },
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": {
+        "service": "backend"
+      }
+    },
+    {
+      "source": "/(.*)",
+      "destination": {
+        "service": "frontend"
+      }
+    }
+  ]
 }
