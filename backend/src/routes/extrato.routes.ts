@@ -1,5 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
+import "pdf-parse/worker";
 import { PDFParse } from "pdf-parse";
 import { processarExtrato } from "../services/extrato.service";
 
