@@ -4,7 +4,7 @@ Conversor de extratos bancários em PDF para arquivos OFX.
 
 O projeto foi desenvolvido para facilitar a conversão de extratos bancários em PDF para um formato estruturado que possa ser utilizado em sistemas financeiros e contábeis.
 
-## 🚀 Funcionalidades
+## Funcionalidades
 
 - Upload de extrato bancário em PDF
 - Extração de texto do PDF
@@ -20,7 +20,7 @@ O projeto foi desenvolvido para facilitar a conversão de extratos bancários em
 - Geração de arquivo OFX
 - Download do arquivo `.ofx`
 
-## 🖥️ Fluxo
+## Fluxo
 
 ```text
 Selecionar PDF
@@ -36,7 +36,7 @@ Gerar OFX
 Baixar arquivo .ofx
 ```
 
-## 🛠️ Tecnologias
+## Tecnologias
 
 ### Backend
 - Node.js
@@ -80,7 +80,7 @@ pdf2ofx/
 └── .gitignore
 ```
 
-## ⚙️ Instalação
+## Instalação
 
 ### Clone o repositório
 
@@ -121,7 +121,7 @@ Data    Descrição                    Valor        Tipo
 02/06   Res Aplic Aut Mais             501.55     RESGATE
 ```
 
-## 🔄 Geração do OFX
+## Geração do OFX
 
 O arquivo gerado utiliza a estrutura OFX 1.02 e contém informações como banco, agência, conta, moeda, data, tipo, valor e descrição das transações.
 
@@ -144,13 +144,13 @@ A conversão de PDF para OFX e o download do arquivo já estão implementados.
 
 A próxima etapa é validar a importação do OFX gerado em sistemas financeiros/contábeis reais e realizar eventuais ajustes de compatibilidade.
 
-## 🔒 Segurança
+## Segurança
 
 Arquivos enviados para processamento são utilizados como arquivos temporários.
 
 PDFs, arquivos OFX gerados, uploads, `node_modules` e variáveis de ambiente não devem ser versionados no Git.
 
-## 📌 Próximos passos
+## Próximos passos
 
 - [ ] Validar importação do OFX em sistema financeiro real
 - [ ] Ajustar compatibilidade do OFX conforme necessidade
