@@ -1,13 +1,15 @@
 import { Router } from "express";
 import multer from "multer";
-import { readFile } from "node:fs/promises";
 import { PDFParse } from "pdf-parse";
 import { processarExtrato } from "../services/extrato.service";
 
 const router = Router();
 
 const upload = multer({
-    dest: "src/uploads/"
+    storage: multer.memoryStorage(),
+    limits: {
+        fileSize: 4 * 1024 * 1024
+    }
 });
 
 router.post("/upload", upload.single("arquivo"), async (req, res) => {
@@ -22,7 +24,7 @@ router.post("/upload", upload.single("arquivo"), async (req, res) => {
 
         console.log("2 - Lendo arquivo...");
 
-        const buffer = await readFile(req.file.path);
+        const buffer = req.file.buffer;
 
         console.log("3 - Arquivo lido. Tamanho:", buffer.length);
 
