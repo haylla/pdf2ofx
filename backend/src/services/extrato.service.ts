@@ -1,4 +1,5 @@
 import { gerarOFX } from "./ofx.service";
+
 export interface Movimento {
     data: string;
     descricao: string;
@@ -7,44 +8,60 @@ export interface Movimento {
 }
 
 function identificarData(linha: string): string | null {
-    const regex = /^\d{2}\/\d{2}/;
+    const regex = /^(\d{2}\/\d{2})(?:\/\d{4})?/;
     const resultado = linha.match(regex);
 
-    return resultado ? resultado[0] : null;
+    return resultado ? resultado[1] : null;
 }
 
 function identificarDadosConta(texto: string): {
     agencia: string;
     conta: string;
 } {
-    const resultado = texto.match(
+    const formatoNovo = texto.match(
+        /Agência\s+(\d+)\s+Conta\s+([\d-]+)/
+    );
+
+    if (formatoNovo) {
+        return {
+            agencia: formatoNovo[1],
+            conta: formatoNovo[2]
+        };
+    }
+
+    const formatoAntigo = texto.match(
         /Minha conta\s+([\d-]+)\s+Minha agência\s+(\d+)/
     );
 
-    if (!resultado) {
-        throw new Error("Não foi possível identificar agência e conta.");
+    if (formatoAntigo) {
+        return {
+            conta: formatoAntigo[1],
+            agencia: formatoAntigo[2]
+        };
     }
 
-    return {
-        conta: resultado[1],
-        agencia: resultado[2]
-    };
+    throw new Error(
+        "Não foi possível identificar agência e conta no extrato."
+    );
 }
 
 function converterValor(texto: string): number {
-    let limpando = texto.endsWith("-")
-        ? "-" + texto.slice(0, -1)
-        : texto;
+    const negativo =
+        texto.startsWith("-") || texto.endsWith("-");
 
-    limpando = limpando
+    let limpando = texto
+        .replace(/^-/, "")
+        .replace(/-$/, "")
         .replace(/\./g, "")
         .replace(",", ".");
 
-    return parseFloat(limpando);
+    const valor = parseFloat(limpando);
+
+    return negativo ? -valor : valor;
 }
 
 function encontrarValores(linha: string): string[] {
-    const regex = /\d{1,3}(?:\.\d{3})*,\d{2}-?|\d+,\d{2}-?/g;
+    const regex = /-?(?:\d{1,3}(?:\.\d{3})*|\d+),\d{2}-?/g;
 
     return linha.match(regex) ?? [];
 }
@@ -59,12 +76,14 @@ function identificarTipo(descricao: string): Movimento["tipo"] {
     if (descricaoNormalizada.startsWith("RES APLIC AUT MAIS")) {
         return "RESGATE";
     }
+
     if (descricaoNormalizada.includes("BUSINESS 4004-8428")) {
         return "POUPANCA";
     }
 
     return "MOVIMENTACAO";
 }
+
 function parsearMovimentacao(
     linha: string,
     dataAtual: string
@@ -84,7 +103,7 @@ function parsearMovimentacao(
     const valor = converterValor(textoValor);
 
     if (Number.isNaN(valor)) {
-    return null;
+        return null;
     }
 
     const dataEncontrada = identificarData(linha);
@@ -94,130 +113,327 @@ function parsearMovimentacao(
     let descricao = linha;
 
     if (dataEncontrada) {
-        descricao = descricao.replace(dataEncontrada, "").trim();
+        const dataCompleta = linha.match(
+            /^\d{2}\/\d{2}(?:\/\d{4})?/
+        )?.[0];
+
+        if (dataCompleta) {
+            descricao = descricao
+                .replace(dataCompleta, "")
+                .trim();
+        }
     }
 
     for (const valorEncontrado of valores) {
-    descricao = descricao
-        .replace(valorEncontrado, "")
-        .trim();
-}
-if (!descricao) {
-    return null;
+        descricao = descricao
+            .replace(valorEncontrado, "")
+            .trim();
+    }
+
+    if (!descricao) {
+        return null;
+    }
+
+    const tipo = identificarTipo(descricao);
+
+    return {
+        data,
+        descricao,
+        valor,
+        tipo
+    };
 }
 
-  const tipo = identificarTipo(descricao);
+function agruparMovimentacoes(linhas: string[]): string[] {
+    const grupos: string[] = [];
+    let grupoAtual: string[] = [];
 
-return {
-    data,
-    descricao,
-    valor,
-    tipo
-};
+    for (const linha of linhas) {
+        const linhaLimpa = linha.trim();
+
+        if (!linhaLimpa) {
+            continue;
+        }
+
+        const temData =
+            /^\d{2}\/\d{2}(?:\/\d{4})?\b/.test(
+                linhaLimpa
+            );
+
+        if (temData) {
+            if (grupoAtual.length > 0) {
+                grupos.push(
+                    grupoAtual.join(" ")
+                );
+            }
+
+            grupoAtual = [linhaLimpa];
+        } else if (grupoAtual.length > 0) {
+            grupoAtual.push(linhaLimpa);
+        }
+    }
+
+    if (grupoAtual.length > 0) {
+        grupos.push(
+            grupoAtual.join(" ")
+        );
+    }
+
+    return grupos;
 }
+
+function limparLinhaMovimentacao(
+    linha: string
+): string {
+    return linha
+        .replace(
+            /^D = débito a compensar\s+/i,
+            ""
+        )
+        .replace(
+            /^G = aplicação programada\s+/i,
+            ""
+        )
+        .replace(
+            /^Para demais siglas.*?Sispag\s+/i,
+            "Sispag "
+        )
+        .replace(
+            /^Explicativas no final do extrato\s+/i,
+            ""
+        );
+}
+
+function ehModeloNovo(texto: string): boolean {
+    return /Agência\s+\d+\s+Conta\s+[\d-]+/i.test(
+        texto
+    );
+}
+
 function processarExtrato(texto: string): {
     movimentos: Movimento[];
     ofx: string;
 } {
+    const { agencia, conta } =
+        identificarDadosConta(texto);
 
-    const { agencia, conta } = identificarDadosConta(texto);
-
-        console.log("Agência:", agencia);
-        console.log("Conta:", conta);
-
-    const linhas = texto.split("\n");
+    console.log("Agência:", agencia);
+    console.log("Conta:", conta);
 
     const movimentos: Movimento[] = [];
 
-    let dataAtual = "";
+    /*
+     * MODELO NOVO
+     *
+     * Exemplo:
+     * Agência 0274 Conta 0098751-0
+     *
+     * Nesse modelo as movimentações podem
+     * ocupar várias linhas.
+     */
+    if (ehModeloNovo(texto)) {
 
-    for (const linha of linhas) {
-    const linhaOriginal = linha.trim();
-        
-    if (!linhaOriginal) {
-        continue;
-    }
-    if (linhaOriginal.includes("na conta corrente")) {
         console.log(
-            "FIM DA MOVIMENTAÇÃO:",
-            linhaOriginal
+            "MODELO NOVO DETECTADO"
         );
 
-        break;
-    }
+        const linhas = texto.split("\n");
 
-    const linhaLimpa =
-        limparLinhaMovimentacao(linhaOriginal);
+        const grupos =
+            agruparMovimentacoes(linhas);
 
-if (linhaOriginal.toLowerCase().includes("poupança automática")) {
-    console.log(
-        "POUPANÇA ENCONTRADA:",
-        linhaOriginal
-    );
-}
+        for (const grupo of grupos) {
 
-    if (/^(?:\d{2}\/\d{2}\s+)?SALDO\b/i.test(linhaLimpa)) {
-        console.log(
-            "IGNORANDO SALDO:",
-            linhaLimpa
-        );
+            const linhaOriginal =
+                grupo.trim();
 
-        continue;    
-    }
-
-        const dataEncontrada = identificarData(linhaLimpa);
-
-        if (dataEncontrada) {
-            dataAtual = dataEncontrada;
-        }
-
-        if (!dataAtual) {
-            continue;
-        }
-
-        function limparLinhaMovimentacao(linha: string): string {
-         return linha
-        .replace(/^D = débito a compensar\s+/i, "")
-        .replace(/^G = aplicação programada\s+/i, "")
-        /*.replace(/^P = poupança automática\s+Business 4004-8428\s+/i, "")*/
-        .replace(/^Para demais siglas.*?Sispag\s+/i, "Sispag ")
-        .replace(/^Explicativas no final do extrato\s+/i, "");
-        }
-
-        const movimento = parsearMovimentacao(
-            linhaLimpa,
-            dataAtual
-        );
-
-        if (movimento) {
-            if (!movimento.descricao) {
-                console.log(
-                    "MOVIMENTO SEM DESCRIÇÃO:",
-                    linhaLimpa
-                );
+            if (!linhaOriginal) {
                 continue;
             }
 
-            movimentos.push(movimento);
+            const linhaLimpa =
+                limparLinhaMovimentacao(
+                    linhaOriginal
+                );
+
+            /*
+             * Ignora linhas de saldo.
+             */
+            if (
+                /^(?:\d{2}\/\d{2}(?:\/\d{4})?\s+)?SALDO\b/i.test(
+                    linhaLimpa
+                )
+            ) {
+                console.log(
+                    "IGNORANDO SALDO:",
+                    linhaLimpa
+                );
+
+                continue;
+            }
+
+            const dataEncontrada =
+                identificarData(
+                    linhaLimpa
+                );
+
+            if (!dataEncontrada) {
+                continue;
+            }
+
+            const movimento =
+                parsearMovimentacao(
+                    linhaLimpa,
+                    dataEncontrada
+                );
+
+            if (movimento) {
+                movimentos.push(
+                    movimento
+                );
+            }
+        }
+
+    } else {
+
+        /*
+         * MODELO ANTIGO
+         *
+         * Mantemos o comportamento
+         * que já funcionava antes
+         * do agrupamento.
+         */
+
+        console.log(
+            "MODELO ANTIGO DETECTADO"
+        );
+
+        const linhas =
+            texto.split("\n");
+
+        let dataAtual = "";
+
+        for (const linha of linhas) {
+
+            const linhaOriginal =
+                linha.trim();
+
+            if (!linhaOriginal) {
+                continue;
+            }
+
+            if (
+                linhaOriginal.includes(
+                    "na conta corrente"
+                )
+            ) {
+                console.log(
+                    "FIM DA MOVIMENTAÇÃO:",
+                    linhaOriginal
+                );
+
+                break;
+            }
+
+            const linhaLimpa =
+                limparLinhaMovimentacao(
+                    linhaOriginal
+                );
+
+            if (
+                linhaOriginal
+                    .toLowerCase()
+                    .includes(
+                        "poupança automática"
+                    )
+            ) {
+                console.log(
+                    "POUPANÇA ENCONTRADA:",
+                    linhaOriginal
+                );
+            }
+
+            /*
+             * Ignora saldo.
+             */
+            if (
+                /^(?:\d{2}\/\d{2}(?:\/\d{4})?\s+)?SALDO\b/i.test(
+                    linhaLimpa
+                )
+            ) {
+                console.log(
+                    "IGNORANDO SALDO:",
+                    linhaLimpa
+                );
+
+                continue;
+            }
+
+            const dataEncontrada =
+                identificarData(
+                    linhaLimpa
+                );
+
+            if (dataEncontrada) {
+                dataAtual =
+                    dataEncontrada;
+            }
+
+            if (!dataAtual) {
+                continue;
+            }
+
+            const movimento =
+                parsearMovimentacao(
+                    linhaLimpa,
+                    dataAtual
+                );
+
+            if (movimento) {
+
+                if (!movimento.descricao) {
+                    console.log(
+                        "MOVIMENTO SEM DESCRIÇÃO:",
+                        linhaLimpa
+                    );
+
+                    continue;
+                }
+
+                movimentos.push(
+                    movimento
+                );
+            }
         }
     }
 
-    const ofx = gerarOFX(
-    movimentos,
-    agencia,
-    conta
-);
+    console.log(
+        "Quantidade de movimentos:",
+        movimentos.length
+    );
 
-    console.log("========== OFX GERADO ==========");
+    const ofx = gerarOFX(
+        movimentos,
+        agencia,
+        conta
+    );
+
+    console.log(
+        "========== OFX GERADO =========="
+    );
+
     console.log(ofx);
-    console.log("================================");
+
+    console.log(
+        "================================"
+    );
 
     return {
-    movimentos,
-    ofx
-};
-    
+        movimentos,
+        ofx
+    };
 }
+
 export {
     processarExtrato
 };
